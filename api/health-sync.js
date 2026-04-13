@@ -112,11 +112,11 @@ async function syncV2(metrics) {
       const qty = point.qty ?? point.value ?? point.Qty
 
       if (col === 'sleep_raw') {
-        // Accumulate sleep hours (qty is in hours from Health Auto Export)
-        dayMap[date].sleep_hours = (dayMap[date].sleep_hours ?? 0) + (parseFloat(qty) || 0)
-      } else if ((col === 'steps' || col === 'active_calories') && qty != null) {
-        // Integer columns — must round
-        dayMap[date][col] = Math.round(parseFloat(qty))
+        // sleep_analysis point has totalSleep in hours — use that directly
+        const totalSleep = point.totalSleep ?? point.asleep ?? qty
+        if (totalSleep != null && parseFloat(totalSleep) > 0) {
+          dayMap[date].sleep_hours = parseFloat(totalSleep)
+        }
       } else if (col !== null && qty != null) {
         dayMap[date][col] = parseFloat(qty)
       }
