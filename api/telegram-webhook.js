@@ -30,12 +30,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  // Acknowledge immediately — Telegram requires a 200 within 5 seconds
-  res.status(200).json({ ok: true })
-
   const update = req.body
   const message = update?.message ?? update?.edited_message
-  if (!message) return
+
+  if (!message) {
+    return res.status(200).json({ ok: true })
+  }
 
   const chatId = message.chat.id.toString()
   const text = message.text ?? ''
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   // Security: only respond to Jose's chat ID
   if (process.env.TELEGRAM_CHAT_ID && chatId !== process.env.TELEGRAM_CHAT_ID) {
     console.warn(`[webhook] Ignoring message from unknown chat ${chatId}`)
-    return
+    return res.status(200).json({ ok: true })
   }
 
   try {
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     // Photo message → /plan handler
     if (photo && photo.length > 0) {
       await handlePlan(chatId, photo)
-      return
+      return res.status(200).json({ ok: true })
     }
 
     const parsed = parseCommand(text)
@@ -97,9 +97,12 @@ export default async function handler(req, res) {
     } else if (text.trim()) {
       await handleFreeText(chatId, text)
     }
+
+    return res.status(200).json({ ok: true })
   } catch (err) {
     console.error('[webhook] Error handling message:', err)
     await sendMessage(chatId, `Sorry, something went wrong: ${err.message}`)
+    return res.status(200).json({ ok: true })
   }
 }
 
