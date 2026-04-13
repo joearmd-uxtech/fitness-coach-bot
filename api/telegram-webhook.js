@@ -147,9 +147,8 @@ async function handleToday(chatId) {
   // Recovery score
   const { data: recentMetrics } = await supabase
     .from('health_metrics').select('hrv_ms').order('date', { ascending: false }).limit(7)
-  const hrv7dayAvg = recentMetrics?.length
-    ? recentMetrics.reduce((s, m) => s + (m.hrv_ms ?? 0), 0) / recentMetrics.length
-    : null
+  const hrvValues = recentMetrics?.filter(m => m.hrv_ms != null).map(m => m.hrv_ms) ?? []
+  const hrv7dayAvg = hrvValues.length ? Math.round(hrvValues.reduce((s, v) => s + v, 0) / hrvValues.length) : null
 
   const score = metrics
     ? computeRecoveryScore({ hrv_ms: metrics.hrv_ms, hrv_7day_avg: hrv7dayAvg, sleep_hours: metrics.sleep_hours, bipap_ahi: metrics.bipap_ahi })
@@ -284,11 +283,11 @@ async function handleRecovery(chatId) {
 
 *Score: ${score}/100* (${recoveryLabel(score)})
 
-HRV: ${metrics.hrv_ms ?? 'N/A'}ms (7-day avg: ${hrv7dayAvg ?? 'N/A'}ms)
-Resting HR: ${metrics.resting_heart_rate ?? 'N/A'}bpm
-Sleep: ${metrics.sleep_hours ?? 'N/A'}hrs
-BiPAP AHI: ${metrics.bipap_ahi != null ? `${metrics.bipap_ahi} events/hr` : 'N/A'}${metrics.bipap_ahi > 10 ? ' ⚠️' : ''}
-Steps: ${metrics.steps?.toLocaleString() ?? 'N/A'}
+HRV: ${metrics.hrv_ms != null ? `${metrics.hrv_ms}ms` : 'N/A'} (7-day avg: ${hrv7dayAvg != null && hrv7dayAvg > 0 ? `${hrv7dayAvg}ms` : 'N/A'})
+Resting HR: ${metrics.resting_heart_rate != null ? `${metrics.resting_heart_rate}bpm` : 'N/A'}
+Sleep: ${metrics.sleep_hours != null && metrics.sleep_hours > 0 ? `${metrics.sleep_hours}hrs` : 'N/A'}
+BiPAP AHI: ${metrics.bipap_ahi != null ? `${metrics.bipap_ahi} events/hr${metrics.bipap_ahi > 10 ? ' ⚠️' : ''}` : 'N/A'}
+Steps: ${metrics.steps != null ? metrics.steps.toLocaleString() : 'N/A'}
 
 _${recoveryGuidance(score)}_`
 
