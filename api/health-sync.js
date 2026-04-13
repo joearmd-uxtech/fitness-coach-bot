@@ -86,6 +86,9 @@ async function syncV2(metrics) {
   // Build a map: date → { column: value }
   const dayMap = {}
 
+  // Log all metric names received so we can see exact field names
+  console.log('[health-sync] metric names received:', metrics.map(m => m.name).join(', '))
+
   for (const metric of metrics) {
     const col = METRIC_MAP[metric.name?.toLowerCase()]
     if (col === undefined) continue // unknown metric, skip
