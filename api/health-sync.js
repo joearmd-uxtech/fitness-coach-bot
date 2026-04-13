@@ -16,6 +16,15 @@
 import supabase from '../lib/supabase.js'
 import { computeRecoveryScore } from '../lib/recovery-score.js'
 
+// Allow up to 10mb payload (Health Auto Export can send large batches)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
