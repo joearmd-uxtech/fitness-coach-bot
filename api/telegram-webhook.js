@@ -373,7 +373,7 @@ async function handlePlan(chatId, photos) {
             text: `Extract the training plan from this Runna screenshot.
 Return a JSON array (no markdown, no explanation — raw JSON only) with one object per workout day shown.
 Fields per object:
-  - date: YYYY-MM-DD (infer year as current year if not shown)
+  - date: YYYY-MM-DD (today is ${new Date().toISOString().slice(0, 10)} — use this year for all dates)
   - workout_type: one of "easy_run", "long_run", "tempo", "intervals", "fartlek", "strength", "rest", "cross_training"
   - planned_distance_km: number or null (null for strength/rest/cross-training)
   - description: brief description of the session as shown in Runna (e.g. "Easy 8km + 4x100m strides")
