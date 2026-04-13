@@ -72,10 +72,15 @@ export default async function handler(req, res) {
 // Maps Health Auto Export metric names → our DB columns
 const METRIC_MAP = {
   heart_rate_variability_sdnn: 'hrv_ms',
+  heart_rate_variability:      'hrv_ms',   // Health Auto Export actual name
   resting_heart_rate:          'resting_heart_rate',
   step_count:                  'steps',
   steps:                       'steps',
   active_energy_burned:        'active_calories',
+  active_energy:               'active_calories', // Health Auto Export actual name
+  basal_energy_burned:         null, // ignore basal/resting energy
+  resting_energy:              null,
+  respiratory_rate:            null, // not in our schema yet
   // Sleep analysis comes as separate stage entries — handled below
   sleep_analysis:              'sleep_raw',
   asleep:                      'sleep_raw',
@@ -104,6 +109,9 @@ async function syncV2(metrics) {
       if (col === 'sleep_raw') {
         // Accumulate sleep hours (qty is in hours from Health Auto Export)
         dayMap[date].sleep_hours = (dayMap[date].sleep_hours ?? 0) + (parseFloat(qty) || 0)
+      } else if (col === 'steps' && qty != null) {
+        // Steps must be integer
+        dayMap[date][col] = Math.round(parseFloat(qty))
       } else if (col !== null && qty != null) {
         dayMap[date][col] = parseFloat(qty)
       }
