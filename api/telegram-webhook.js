@@ -133,14 +133,16 @@ async function handleToday(chatId) {
   const today = new Date().toISOString().slice(0, 10)
 
   const [
-    { data: planned },
-    { data: metrics },
+    { data: plannedRows },
+    { data: metricsRows },
     { data: shoes },
   ] = await Promise.all([
-    supabase.from('planned_workouts').select('*').eq('planned_date', today).single(),
-    supabase.from('health_metrics').select('*').order('date', { ascending: false }).limit(1).single(),
+    supabase.from('planned_workouts').select('*').eq('planned_date', today).limit(1),
+    supabase.from('health_metrics').select('*').order('date', { ascending: false }).limit(1),
     supabase.from('shoes').select('*').eq('is_retired', false),
   ])
+  const planned = plannedRows?.[0]
+  const metrics = metricsRows?.[0]
 
   // Recovery score
   const { data: recentMetrics } = await supabase
@@ -205,12 +207,13 @@ async function handleShoes(chatId) {
 }
 
 async function handleLast(chatId) {
-  const { data: workout } = await supabase
+  const { data: rows } = await supabase
     .from('workouts')
     .select('*')
     .order('start_date', { ascending: false })
     .limit(1)
-    .single()
+
+  const workout = rows?.[0]
 
   if (!workout) {
     return sendMessage(chatId, 'No workouts found. Make sure Strava is synced.')
@@ -252,12 +255,13 @@ async function handleWeek(chatId) {
 }
 
 async function handleRecovery(chatId) {
-  const { data: metrics } = await supabase
+  const { data: rows } = await supabase
     .from('health_metrics')
     .select('*')
     .order('date', { ascending: false })
     .limit(1)
-    .single()
+
+  const metrics = rows?.[0]
 
   if (!metrics) {
     return sendMessage(chatId, 'No health data available. Make sure Apple Health Auto Export is configured.')
