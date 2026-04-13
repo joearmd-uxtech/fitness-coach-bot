@@ -99,6 +99,11 @@ async function syncV2(metrics) {
     if (col === undefined) continue // unknown metric, skip
     if (!Array.isArray(metric.data)) continue
 
+    // Log first data point of each metric so we can see structure
+    if (metric.data.length > 0) {
+      console.log(`[health-sync] sample "${metric.name}":`, JSON.stringify(metric.data[0]))
+    }
+
     for (const point of metric.data) {
       const date = normalizeDate(point.date ?? point.startDate)
       if (!date) continue
