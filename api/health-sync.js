@@ -114,8 +114,8 @@ async function syncV2(metrics) {
       if (col === 'sleep_raw') {
         // Accumulate sleep hours (qty is in hours from Health Auto Export)
         dayMap[date].sleep_hours = (dayMap[date].sleep_hours ?? 0) + (parseFloat(qty) || 0)
-      } else if (col === 'steps' && qty != null) {
-        // Steps must be integer
+      } else if ((col === 'steps' || col === 'active_calories') && qty != null) {
+        // Integer columns — must round
         dayMap[date][col] = Math.round(parseFloat(qty))
       } else if (col !== null && qty != null) {
         dayMap[date][col] = parseFloat(qty)
