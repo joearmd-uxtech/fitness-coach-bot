@@ -283,11 +283,11 @@ async function handleRecovery(chatId) {
 
 *Score: ${score}/100* (${recoveryLabel(score)})
 
-HRV: ${metrics.hrv_ms != null ? `${metrics.hrv_ms}ms` : 'N/A'} (7-day avg: ${hrv7dayAvg != null && hrv7dayAvg > 0 ? `${hrv7dayAvg}ms` : 'N/A'})
+HRV: ${metrics.hrv_ms != null ? `${Math.round(metrics.hrv_ms)}ms` : 'N/A'} (7-day avg: ${hrv7dayAvg != null && hrv7dayAvg > 0 ? `${hrv7dayAvg}ms` : 'N/A'})
 Resting HR: ${metrics.resting_heart_rate != null ? `${metrics.resting_heart_rate}bpm` : 'N/A'}
-Sleep: ${metrics.sleep_hours != null && metrics.sleep_hours > 0 ? `${metrics.sleep_hours}hrs` : 'N/A'}
+Sleep: ${metrics.sleep_hours != null && metrics.sleep_hours > 0 ? `${parseFloat(metrics.sleep_hours).toFixed(1)}hrs` : 'N/A'}
 BiPAP AHI: ${metrics.bipap_ahi != null ? `${metrics.bipap_ahi} events/hr${metrics.bipap_ahi > 10 ? ' ⚠️' : ''}` : 'N/A'}
-Steps: ${metrics.steps != null ? metrics.steps.toLocaleString() : 'N/A'}
+Steps: ${metrics.steps != null ? Math.round(metrics.steps).toLocaleString() : 'N/A'}
 
 _${recoveryGuidance(score)}_`
 
