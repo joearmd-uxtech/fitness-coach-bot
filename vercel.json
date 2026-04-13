@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/strava-sync",
+      "schedule": "0 11 * * *"
+    }
+  ]
+}

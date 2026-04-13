@@ -1,0 +1,13 @@
+{
+  "name": "fitness-coach-bot",
+  "version": "1.0.0",
+  "description": "Personal AI fitness coaching bot for Jose Amador — Telegram bot powered by Claude, Strava, and Apple Health",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@supabase/supabase-js": "^2.49.4"
+  }
+}
