@@ -50,9 +50,9 @@ export default async function handler(req, res) {
   try {
     await sendTyping(chatId)
 
-    // Photo message → /plan handler
+    // Photo message → classify first, then route
     if (photo && photo.length > 0) {
-      await handlePlan(chatId, photo)
+      await handlePhoto(chatId, photo, message.caption ?? '')
       return res.status(200).json({ ok: true })
     }
 
@@ -349,6 +349,41 @@ async function handleSync(chatId) {
     }
   } catch (err) {
     await sendMessage(chatId, `Sync error: ${err.message}`)
+  }
+}
+
+async function handlePhoto(chatId, photos, caption) {
+  const fileId = photos[photos.length - 1].file_id
+  const base64Image = await downloadFileAsBase64(fileId)
+
+  const imageBlock = {
+    type: 'image',
+    source: { type: 'base64', media_type: 'image/jpeg', data: base64Image },
+  }
+
+  // Quick classification using Haiku: is this a Runna plan or workout/activity data?
+  const classifyResponse = await anthropic.messages.create({
+    model: 'claude-haiku-4-20250514',
+    max_tokens: 5,
+    messages: [{
+      role: 'user',
+      content: [
+        imageBlock,
+        { type: 'text', text: 'Is this image a Runna training plan calendar/schedule, or workout/activity data (Strava, Garmin, health stats, run summary)? Reply with exactly one word: PLAN or WORKOUT' },
+      ],
+    }],
+  })
+
+  const classification = classifyResponse.content[0]?.text?.trim().toUpperCase()
+  console.log(`[handlePhoto] classification="${classification}" caption="${caption}"`)
+
+  if (classification === 'PLAN') {
+    await handlePlan(chatId, photos)
+  } else {
+    // Workout data or unclear — pass to Claude with image as context
+    const userText = caption || 'Te mando esta captura.'
+    const reply = await chat(chatId, userText, imageBlock)
+    await sendMessage(chatId, reply)
   }
 }
 
