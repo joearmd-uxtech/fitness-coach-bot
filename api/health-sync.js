@@ -281,7 +281,11 @@ async function syncHealthWorkouts(workouts) {
 
       // Build synthetic ID so we can upsert safely
       // Use date + type + source to keep it deterministic
-      const syntheticId = `ah_${startDate.replace(/-/g, '')}_${activityType.toLowerCase()}_${String(sourceName).toLowerCase().replace(/\s+/g, '_').slice(0, 10)}`
+      // workouts.id is bigint — use a negative integer to avoid Strava ID conflicts
+      // Formula: -(YYYYMMDD * 100 + typeCode) gives a deterministic negative bigint
+      const dateNum = parseInt(startDate.replace(/-/g, ''), 10) // e.g. 20260424
+      const typeCode = typeRaw.split('').reduce((acc, c) => (acc + c.charCodeAt(0)) % 100, 0)
+      const syntheticId = -(dateNum * 100 + typeCode)
 
       const row = {
         id:              syntheticId,
