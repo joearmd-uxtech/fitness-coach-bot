@@ -88,7 +88,7 @@ export default async function handler(req, res) {
           await handleWeight(chatId, parsed.args)
           break
         case 'sync':
-          await handleSync(chatId)
+          await handleSync(chatId, req.headers.host)
           break
         default:
           // Unknown command — let Claude handle it as free text
@@ -337,10 +337,11 @@ async function handleWeight(chatId, args) {
   await sendMessage(chatId, `Weight updated to ${weight}kg.`)
 }
 
-async function handleSync(chatId) {
+async function handleSync(chatId, host) {
   await sendMessage(chatId, 'Triggering Strava sync...')
   try {
-    const res = await fetch(`https://${process.env.VERCEL_URL}/api/strava-sync`, { method: 'GET' })
+    const baseUrl = host ? `https://${host}` : `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL}`
+    const res = await fetch(`${baseUrl}/api/strava-sync`, { method: 'GET' })
     const data = await res.json()
     if (data.ok) {
       await sendMessage(chatId, `Sync complete. ${data.synced_activities} activities, ${data.synced_shoes} shoes synced.`)
