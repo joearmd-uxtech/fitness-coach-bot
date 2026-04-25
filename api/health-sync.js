@@ -42,23 +42,32 @@ export default async function handler(req, res) {
     console.log('[health-sync] keys:', Object.keys(payload ?? {}))
 
     let synced = 0
+    let syncedWorkouts = 0
 
-    // ── V2 format: { data: { metrics: [...] } } ──────────────────────────────
+    // ── V2 format: { data: { metrics: [...], workouts: [...] } } ─────────────
     if (payload?.data?.metrics && Array.isArray(payload.data.metrics)) {
       synced = await syncV2(payload.data.metrics)
-
     // ── V1 format: { data: [ {date, hrv, ...}, ... ] } ───────────────────────
     } else if (Array.isArray(payload?.data)) {
       for (const entry of payload.data) {
         if (await upsertDayV1(entry)) synced++
       }
-
     // ── Single object fallback ────────────────────────────────────────────────
     } else {
       if (await upsertDayV1(payload)) synced++
     }
 
-    return res.status(200).json({ ok: true, synced })
+    // ── Workout ingestion (works alongside any format above) ─────────────────
+    if (payload?.data?.workouts && Array.isArray(payload.data.workouts)) {
+      console.log(`[health-sync] found ${payload.data.workouts.length} workouts`)
+      // Log first workout to learn the exact format
+      if (payload.data.workouts.length > 0) {
+        console.log('[health-sync] sample workout:', JSON.stringify(payload.data.workouts[0]))
+      }
+      syncedWorkouts = await syncHealthWorkouts(payload.data.workouts)
+    }
+
+    return res.status(200).json({ ok: true, synced, synced_workouts: syncedWorkouts })
   } catch (err) {
     console.error('[health-sync] Error:', err)
     return res.status(500).json({ error: err.message })
@@ -200,6 +209,113 @@ async function upsertDay(date, fields) {
     return false
   }
   return true
+}
+
+// ---------------------------------------------------------------------------
+// Workout ingestion from Apple Health (via Health Auto Export)
+// Fills gaps when Strava doesn't have an activity (e.g. Garmin sync delay)
+// ---------------------------------------------------------------------------
+
+// Maps Apple Health / HK workout type strings → our activity_type values
+const HK_ACTIVITY_MAP = {
+  running:                              'Run',
+  hkworkoutactivitytyperunning:         'Run',
+  cycling:                              'Ride',
+  hkworkoutactivitytypecycling:         'Ride',
+  walking:                              'Walk',
+  hkworkoutactivitytypewalking:         'Walk',
+  hiking:                               'Hike',
+  hkworkoutactivitytypehiking:          'Hike',
+  traditionalstrengthtraining:          'WeightTraining',
+  hkworkoutactivitytypetraditionalstrengthtraining: 'WeightTraining',
+  functionalstrengthtraining:           'WeightTraining',
+  hkworkoutactivitytypefunctionalstrengthtraining:  'WeightTraining',
+  highintensityintervaltraining:        'Workout',
+  hkworkoutactivitytypehighintensityintervaltraining: 'Workout',
+  crosstraining:                        'Workout',
+  hkworkoutactivitytypecrosstraining:   'Workout',
+  yoga:                                 'Yoga',
+  swimming:                             'Swim',
+  elliptical:                           'Elliptical',
+}
+
+async function syncHealthWorkouts(workouts) {
+  let synced = 0
+
+  for (const w of workouts) {
+    try {
+      // Parse start date
+      const startRaw = w.startDate ?? w.start_date ?? w.date
+      const startDate = normalizeDate(startRaw)
+      if (!startDate) continue
+
+      // Determine activity type
+      const typeRaw = (w.workoutActivityType ?? w.type ?? w.activityType ?? '').toLowerCase()
+      const activityType = HK_ACTIVITY_MAP[typeRaw] ?? 'Workout'
+
+      // Skip unknown/rest types we don't care about
+      if (!typeRaw) continue
+
+      // Check if a Strava activity already exists for this date + type
+      // (Strava data is more complete — don't overwrite it)
+      const { data: existing } = await supabase
+        .from('workouts')
+        .select('id')
+        .eq('activity_type', activityType)
+        .gte('start_date', `${startDate}T00:00:00Z`)
+        .lte('start_date', `${startDate}T23:59:59Z`)
+        .limit(1)
+
+      if (existing?.length > 0) {
+        console.log(`[health-sync] workout ${startDate} ${activityType} already in DB — skipping`)
+        continue
+      }
+
+      // Parse metrics — Health Auto Export uses various field names
+      const durationMins = w.duration ?? w.totalTime ?? null        // minutes
+      const distanceKm   = w.totalDistance ?? w.distance ?? null    // km
+      const calories     = w.totalEnergyBurned ?? w.energy ?? w.activeEnergy ?? null
+      const avgHR        = w.averageHeartRate ?? w.heartRateAverage ?? w.avgHeartRate ?? null
+      const maxHR        = w.maxHeartRate ?? w.heartRateMax ?? null
+      const sourceName   = w.sourceName ?? w.source ?? 'apple_health'
+
+      // Build synthetic ID so we can upsert safely
+      // Use date + type + source to keep it deterministic
+      const syntheticId = `ah_${startDate.replace(/-/g, '')}_${activityType.toLowerCase()}_${String(sourceName).toLowerCase().replace(/\s+/g, '_').slice(0, 10)}`
+
+      const row = {
+        id:              syntheticId,
+        activity_type:   activityType,
+        name:            w.name ?? `${activityType} (Apple Health)`,
+        start_date:      startRaw ? String(startRaw).slice(0, 10) + 'T00:00:00Z' : `${startDate}T00:00:00Z`,
+        distance_km:     distanceKm != null ? parseFloat(distanceKm) : null,
+        duration_seconds: durationMins != null ? Math.round(parseFloat(durationMins) * 60) : null,
+        avg_heart_rate:  avgHR != null ? Math.round(parseFloat(avgHR)) : null,
+        max_heart_rate:  maxHR != null ? Math.round(parseFloat(maxHR)) : null,
+        description:     `Source: ${sourceName}`,
+      }
+
+      // Compute avg pace if we have distance + duration
+      if (row.distance_km && row.duration_seconds && row.distance_km > 0) {
+        row.avg_pace_sec_km = Math.round(row.duration_seconds / row.distance_km)
+      }
+
+      const { error } = await supabase
+        .from('workouts')
+        .upsert(row, { onConflict: 'id' })
+
+      if (error) {
+        console.error(`[health-sync] workout upsert failed ${startDate}:`, error.message)
+      } else {
+        console.log(`[health-sync] inserted workout ${syntheticId}`)
+        synced++
+      }
+    } catch (wErr) {
+      console.error('[health-sync] workout parse error:', wErr.message)
+    }
+  }
+
+  return synced
 }
 
 // ---------------------------------------------------------------------------
