@@ -364,7 +364,7 @@ async function handlePhoto(chatId, photos, caption) {
 
   // Quick classification using Haiku: is this a Runna plan or workout/activity data?
   const classifyResponse = await anthropic.messages.create({
-    model: 'claude-haiku-4-20250514',
+    model: 'claude-3-5-haiku-20241022',
     max_tokens: 5,
     messages: [{
       role: 'user',
