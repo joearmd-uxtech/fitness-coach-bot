@@ -130,7 +130,7 @@ Send a *Runna screenshot* to load your weekly plan.`
 }
 
 async function handleToday(chatId) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
 
   const [
     { data: plannedRows },
@@ -302,7 +302,7 @@ async function handleSleep(chatId, args) {
     return sendMessage(chatId, 'Usage: /sleep [hours] [ahi]\nExample: /sleep 6.5 3.2')
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
   const updates = { sleep_hours: hours }
   if (!isNaN(ahi)) updates.bipap_ahi = ahi
 
@@ -504,15 +504,17 @@ function progressBar(pct) {
 }
 
 function getWeekStart() {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  return new Date(new Date().setDate(diff)).toISOString().slice(0, 10)
+  const bogota = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+  const day = bogota.getDay()
+  const diff = bogota.getDate() - day + (day === 0 ? -6 : 1)
+  bogota.setDate(diff)
+  return bogota.toLocaleDateString('en-CA')
 }
 
 function getWeekEnd() {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? 0 : 7)
-  return new Date(new Date().setDate(diff)).toISOString().slice(0, 10)
+  const bogota = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+  const day = bogota.getDay()
+  const diff = bogota.getDate() - day + (day === 0 ? 0 : 7)
+  bogota.setDate(diff)
+  return bogota.toLocaleDateString('en-CA')
 }
