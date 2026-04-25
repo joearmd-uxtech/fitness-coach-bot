@@ -230,7 +230,7 @@ async function handleWeek(chatId) {
 
   const [{ data: planned }, { data: completed }] = await Promise.all([
     supabase.from('planned_workouts').select('*').gte('planned_date', weekStart).lte('planned_date', weekEnd).order('planned_date'),
-    supabase.from('workouts').select('*').gte('start_date', weekStart + 'T00:00:00Z').order('start_date'),
+    supabase.from('workouts').select('*').gte('start_date', weekStart + 'T00:00:00Z').lte('start_date', weekEnd + 'T23:59:59Z').order('start_date'),
   ])
 
   if (!planned?.length) {
@@ -268,8 +268,9 @@ async function handleRecovery(chatId) {
 
   const { data: recentMetrics } = await supabase
     .from('health_metrics').select('hrv_ms').order('date', { ascending: false }).limit(7)
-  const hrv7dayAvg = recentMetrics?.length
-    ? Math.round(recentMetrics.reduce((s, m) => s + (m.hrv_ms ?? 0), 0) / recentMetrics.length)
+  const hrvVals = recentMetrics?.filter(m => m.hrv_ms != null).map(m => m.hrv_ms) ?? []
+  const hrv7dayAvg = hrvVals.length
+    ? Math.round(hrvVals.reduce((s, v) => s + v, 0) / hrvVals.length)
     : null
 
   const score = computeRecoveryScore({
@@ -375,18 +376,19 @@ async function handlePhoto(chatId, photos, caption) {
     await sendMessage(chatId, reply)
   } else {
     // No caption or plan-related caption → extract Runna plan
-    await handlePlan(chatId, photos)
+    // Pass the already-downloaded base64 to avoid a second Telegram API call
+    await handlePlan(chatId, photos, base64Image)
   }
 }
 
-async function handlePlan(chatId, photos) {
+async function handlePlan(chatId, photos, preloadedBase64 = null) {
   await sendMessage(chatId, 'Got it — extracting your Runna plan...')
 
-  // Use the largest photo (last in array = highest resolution)
+  // Use pre-downloaded base64 if available (avoids double download from handlePhoto)
   const fileId = photos[photos.length - 1].file_id
 
   try {
-    const base64Image = await downloadFileAsBase64(fileId)
+    const base64Image = preloadedBase64 ?? await downloadFileAsBase64(fileId)
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -499,7 +501,7 @@ function formatDuration(seconds) {
 }
 
 function progressBar(pct) {
-  const filled = Math.round((pct / 100) * 10)
+  const filled = Math.min(10, Math.max(0, Math.round((pct / 100) * 10)))
   return '█'.repeat(filled) + '░'.repeat(10 - filled)
 }
 

@@ -164,34 +164,45 @@ async function upsertDayV1(entry) {
 // ---------------------------------------------------------------------------
 
 async function upsertDay(date, fields) {
-  // Fetch existing row to preserve BiPAP data
+  // Fetch existing row to preserve BiPAP data AND existing non-null metrics
+  // Critical: only upsert fields that are non-null — never overwrite real data with null
+  // from a partial payload (e.g. an HRV-only sync must not zero out sleep_hours)
   const { data: existing } = await supabase
     .from('health_metrics')
-    .select('bipap_ahi, bipap_hours')
+    .select('*')
     .eq('date', date)
     .single()
 
-  // Fetch 7-day HRV avg for recovery score
+  // Build row from only non-null incoming fields
+  const nonNullFields = Object.fromEntries(
+    Object.entries(fields).filter(([, v]) => v != null)
+  )
+
+  // Fetch 7-day HRV avg for recovery score (filter nulls to avoid deflated average)
   const { data: recent } = await supabase
     .from('health_metrics')
     .select('hrv_ms')
     .order('date', { ascending: false })
     .limit(7)
 
-  const hrv7dayAvg = recent?.length
-    ? recent.reduce((s, m) => s + (m.hrv_ms ?? 0), 0) / recent.length
+  const hrvValues = recent?.filter(m => m.hrv_ms != null).map(m => m.hrv_ms) ?? []
+  const hrv7dayAvg = hrvValues.length
+    ? hrvValues.reduce((s, v) => s + v, 0) / hrvValues.length
     : null
 
   const row = {
     date,
-    ...fields,
+    // Start with existing values so we never clobber stored data
+    ...(existing ?? {}),
+    // Apply only incoming non-null fields on top
+    ...nonNullFields,
     source: 'apple_health',
-    raw: fields,
+    raw: nonNullFields,
   }
 
-  // Preserve existing BiPAP data
-  if (existing?.bipap_ahi != null)    row.bipap_ahi    = existing.bipap_ahi
-  if (existing?.bipap_hours != null)  row.bipap_hours  = existing.bipap_hours
+  // Preserve BiPAP data (redundant now but explicit for clarity)
+  if (existing?.bipap_ahi != null && row.bipap_ahi == null)   row.bipap_ahi   = existing.bipap_ahi
+  if (existing?.bipap_hours != null && row.bipap_hours == null) row.bipap_hours = existing.bipap_hours
 
   row.recovery_score = computeRecoveryScore({
     hrv_ms:       row.hrv_ms ?? null,
@@ -282,10 +293,12 @@ async function syncHealthWorkouts(workouts) {
       // Build synthetic ID so we can upsert safely
       // Use date + type + source to keep it deterministic
       // workouts.id is bigint — use a negative integer to avoid Strava ID conflicts
-      // Formula: -(YYYYMMDD * 100 + typeCode) gives a deterministic negative bigint
+      // Use full char-code sum (not modulo) for uniqueness, multiply date by 10000
+      // to give 4 digits of type space. Max value: -(20991231 * 10000 + ~2000) well within bigint.
       const dateNum = parseInt(startDate.replace(/-/g, ''), 10) // e.g. 20260424
-      const typeCode = typeRaw.split('').reduce((acc, c) => (acc + c.charCodeAt(0)) % 100, 0)
-      const syntheticId = -(dateNum * 100 + typeCode)
+      const typeSum = typeRaw.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+      const sourceSum = String(sourceName).toLowerCase().split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)
+      const syntheticId = -(dateNum * 10000 + (typeSum + sourceSum) % 10000)
 
       const row = {
         id:              syntheticId,

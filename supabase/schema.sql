@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS planned_workouts (
   completed_workout_id bigint REFERENCES workouts(id),
   screenshot_parsed_at timestamptz DEFAULT now()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS planned_workouts_date_unique ON planned_workouts(planned_date);
 CREATE INDEX IF NOT EXISTS idx_planned_workouts_date ON planned_workouts(planned_date);
 
 -- Daily health metrics (Apple Watch + ResMed BiPAP)
@@ -97,8 +98,8 @@ CREATE TABLE IF NOT EXISTS health_metrics (
   sleep_score int,
   bipap_hours numeric,
   bipap_ahi numeric, -- apnea events/hour — lower is better. <5 = normal
-  steps int,
-  active_calories int,
+  steps numeric,       -- changed from int: Apple Health exports fractional step counts
+  active_calories numeric, -- changed from int: same reason
   recovery_score int, -- computed 0-100: composite of HRV + sleep + AHI
   source text DEFAULT 'apple_health',
   raw jsonb
