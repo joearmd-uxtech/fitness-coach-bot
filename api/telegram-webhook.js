@@ -362,29 +362,20 @@ async function handlePhoto(chatId, photos, caption) {
     source: { type: 'base64', media_type: 'image/jpeg', data: base64Image },
   }
 
-  // Quick classification using Haiku: is this a Runna plan or workout/activity data?
-  const classifyResponse = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022',
-    max_tokens: 5,
-    messages: [{
-      role: 'user',
-      content: [
-        imageBlock,
-        { type: 'text', text: 'Is this image a Runna training plan calendar/schedule, or workout/activity data (Strava, Garmin, health stats, run summary)? Reply with exactly one word: PLAN or WORKOUT' },
-      ],
-    }],
-  })
+  // Route based on caption keywords — no extra API call needed
+  // Strava/activity captions → Claude conversation
+  // Plan/schedule captions or no caption → Runna plan extractor
+  const stravaKeywords = /strava|garmin|actividad|activity|corrí|ran|workout result|mi (carrera|run|entreno)|cómo (quedó|me fue)/i
+  const isWorkoutData = caption && stravaKeywords.test(caption)
 
-  const classification = classifyResponse.content[0]?.text?.trim().toUpperCase()
-  console.log(`[handlePhoto] classification="${classification}" caption="${caption}"`)
+  console.log(`[handlePhoto] caption="${caption}" isWorkoutData=${isWorkoutData}`)
 
-  if (classification === 'PLAN') {
-    await handlePlan(chatId, photos)
-  } else {
-    // Workout data or unclear — pass to Claude with image as context
-    const userText = caption || 'Te mando esta captura.'
-    const reply = await chat(chatId, userText, imageBlock)
+  if (isWorkoutData) {
+    const reply = await chat(chatId, caption, imageBlock)
     await sendMessage(chatId, reply)
+  } else {
+    // No caption or plan-related caption → extract Runna plan
+    await handlePlan(chatId, photos)
   }
 }
 
