@@ -105,6 +105,13 @@ CREATE TABLE IF NOT EXISTS health_metrics (
   raw jsonb
 );
 
+-- Key-value config store (Strava refresh token rotation, etc.)
+CREATE TABLE IF NOT EXISTS config (
+  key text PRIMARY KEY,
+  value text,
+  updated_at timestamptz DEFAULT now()
+);
+
 -- Bot conversation history (persistent memory across Telegram sessions)
 CREATE TABLE IF NOT EXISTS chat_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

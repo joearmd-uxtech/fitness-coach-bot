@@ -121,10 +121,17 @@ async function syncV2(metrics) {
       const qty = point.qty ?? point.value ?? point.Qty
 
       if (col === 'sleep_raw') {
-        // sleep_analysis point has totalSleep in hours — use that directly
-        const totalSleep = point.totalSleep ?? point.asleep ?? qty
+        // Two possible formats from Health Auto Export:
+        // 1. Summary entry — has totalSleep (hours) field → use directly, mark as authoritative
+        // 2. Individual stage entries (core, deep, REM, awake) — each has qty in hours → accumulate
+        const totalSleep = point.totalSleep ?? point.asleep
         if (totalSleep != null && parseFloat(totalSleep) > 0) {
+          // Full-night summary — overrides any previously accumulated stage sum
           dayMap[date].sleep_hours = parseFloat(totalSleep)
+          dayMap[date]._sleep_from_summary = true
+        } else if (!dayMap[date]._sleep_from_summary && qty != null && parseFloat(qty) > 0) {
+          // Individual stage — accumulate (ignore if we already have a summary)
+          dayMap[date]._sleep_stage_sum = (dayMap[date]._sleep_stage_sum ?? 0) + parseFloat(qty)
         }
       } else if (col !== null && qty != null) {
         dayMap[date][col] = parseFloat(qty)
@@ -134,6 +141,14 @@ async function syncV2(metrics) {
 
   let synced = 0
   for (const [date, fields] of Object.entries(dayMap)) {
+    // If no summary totalSleep but stages were accumulated, use the stage sum
+    if (fields._sleep_stage_sum != null && fields.sleep_hours == null) {
+      fields.sleep_hours = parseFloat(fields._sleep_stage_sum.toFixed(2))
+    }
+    // Clean up internal tracking keys before upserting
+    delete fields._sleep_stage_sum
+    delete fields._sleep_from_summary
+
     if (Object.keys(fields).length === 0) continue
     if (await upsertDay(date, fields)) synced++
   }
